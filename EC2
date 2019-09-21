@@ -27,7 +27,7 @@ aws ec2 modify-instance-attribute --instance-id i-0b9e514d43bf15ad2 --block-devi
    > sudo file -s /dev/xvdf1
    
    
-   > mount -t xvf -o nouuid /dev/xvdf1 /share
+   > mount -t XSF -o nouuid /dev/xvdf1 /share
     
  
   -----------------------------------
