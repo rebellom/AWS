@@ -1,0 +1,64 @@
+Steps to mount an EBS volume from a Terminated EC2 instance and attach it to a new EC2 instance
+------------------------------------------------------------------------------------------------
+Key Note: EBS volumes has the same UUID which are created from same AMI. This creates problems. See references at the end.
+
+
+1. Create an EC2 instance (Linux) with all default steps
+
+2. Connect to instance and create a folder 'Melvin'
+
+3. By default AWS marks the EBS volume for delete on terminiation of EC2. DeleteOnTermination can be changed to 'false' only through AWS CLI using the the following command.
+aws ec2 modify-instance-attribute --instance-id i-0b9e514d43bf15ad2 --block-device-mappings "[{\"DeviceName\": \"/dev/xvda\",\"Ebs\":{\"DeleteOnTermination\":false}}]"
+
+4. Terminate the EC2 instance. You will notice that the EBS Volume is not deleted. Create a snapshot of this EBS volume. 
+
+5. Create an EBS volume with this snapshot.
+
+6. Create a new EC2 instance and attach the newly created EBS from snapshot to this EC2 instance.
+
+7. To access the old linked EBS volume you need to mount this volume. Use the following command
+   connect to EC2 instance
+   > mkdir /share
+   
+   To see the linked volumes
+   > lsblk
+   
+   To Check the file system of volume
+   > sudo file -s /dev/xvdf1
+   
+   
+   > mount -t xvf -o nouuid /dev/xvdf1 /share
+    
+ 
+  -----------------------------------
+  Useful Resources
+  ----------------------------------------
+  
+  https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-using-volumes.html
+   
+   
+   ----------------------------------------------------------------
+   https://serverfault.com/questions/948408/mount-wrong-fs-type-bad-option-bad-superblock-on-dev-xvdf1-missing-codepage
+   
+   If the instances were launched using the same AMI then their root volumes will have been created from the same EBS snapshot, so the problem is likely duplicate XFS UUIDs. The error message from mount isn't very helpful, but you may see errors like this in /var/log/messages or equivalent:
+
+Jan 13 23:30:29 ip-172-31-15-234 kernel: XFS (nvme1n1): Filesystem has duplicate UUID 56282b3b-c1f3-425e-90db-e9e26def629d - can't mount
+(This example is from a t3 instance using NVMe storage, but it's not NVMe-specific.)
+
+Every XFS filesystem has a (supposedly) unique ID stored on-disk, which protects you from accidentally mounting the same filesystem multiple times. Because the EBS snapshot/restore process is a block-level copy, any volumes you create from a snapshot will have the same UUID as the source volume so you can only mount one at a time.
+
+You can view the UUID for a volume by attaching it but not mounting it, then running xfs_db to examine the attached disk:
+
+# xfs_db -c uuid /dev/nvme1n1
+UUID = 56282b3b-c1f3-425e-90db-e9e26def629d
+(EDIT: The blkid command will also show you the UUID, even if the device is mounted.)
+
+To work around the issue, you can either use the XFS-specific nouuid mount option to temporarily ignore the duplicate check, e.g.
+
+# mount -t xfs -o nouuid /dev/nvme1n1 /mnt
+or you can use xfs_admin to permanently change the UUID on the volume:
+
+# xfs_admin -U generate /dev/nvme1n1
+Clearing log and setting UUID
+writing all SBs
+new UUID = 1eb81512-3f22-4b79-9a35-f22f29745c60
